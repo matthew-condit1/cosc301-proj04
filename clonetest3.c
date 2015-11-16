@@ -16,7 +16,7 @@ int ppid;
    kill(ppid); \
    exit(); \
 }
-/*
+
 void worker(void *arg_ptr);
 
 int main(int argc, char *argv[])
@@ -40,4 +40,4 @@ void worker(void *arg_ptr) {
    exit();
 }
 
-*/
+

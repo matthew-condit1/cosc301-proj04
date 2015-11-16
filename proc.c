@@ -109,7 +109,7 @@ int
 growproc(int n)
 {
   uint sz;
-  
+  acquire(&ptable.lock);
   sz = proc->sz;
   if(n > 0){
     if((sz = allocuvm(proc->pgdir, sz, sz + n)) == 0)
@@ -120,6 +120,7 @@ growproc(int n)
   }
   proc->sz = sz;
   switchuvm(proc);
+  release(&ptable.lock);
   return 0;
 }
 
@@ -294,7 +295,22 @@ exit(void)
 {
   struct proc *p;
   int fd;
+   
 
+ /* 
+  { 
+   	for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) 
+  	{ 
+   		  if(p->parent == proc && p->thread==1) 
+ 		  { 
+   		    p->killed = 1; 
+ 	  	    if(p->state == SLEEPING) 
+ 	  	      {p->state = RUNNABLE;} 
+ 	            join(p->pid); 
+ 	  	  } 
+ 	} 
+  } 
+*/
   if(proc == initproc)
     panic("init exiting");
 
@@ -336,6 +352,10 @@ exit(void)
 int
 wait(void)
 {
+  //Need to make sure only frees if it's the last call to it
+
+  if (proc->thread ==1) return -1;  
+
   struct proc *p;
   int havekids, pid;
 
