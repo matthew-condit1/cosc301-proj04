@@ -4,10 +4,10 @@
 #include "user.h"
 #include "x86.h"
 
-/*
- * This is where you'll need to implement the user-level functions
- */
 
+//This is where you'll need to implement the user-level functions
+ 
+/*
 void lock_init(lock_t *lock) {
 }
 
@@ -22,3 +22,4 @@ int thread_join(int pid) {
 
 int thread_create(void (*start_routine)(void *), void *arg) {
 }
+*/

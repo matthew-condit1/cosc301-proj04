@@ -95,6 +95,7 @@ userinit(void)
   p->tf->eflags = FL_IF;
   p->tf->esp = PGSIZE;
   p->tf->eip = 0;  // beginning of initcode.S
+  p->thread = 0;
 
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
@@ -165,6 +166,125 @@ fork(void)
   
   return pid;
 }
+
+
+int
+clone(void(*fcn)(void*), void *arg, void *stack)
+{
+  int i, pid;
+  struct proc *np;
+
+  // Allocate process.
+  if((np = allocproc()) == 0)
+    return -1;
+
+  //Check to make sure stack is page aligned and one page
+  if (((int) stack % PGSIZE)!=0 ||fcn ==0||stack==0)  return -1; 
+  
+
+  //initialize thread here
+  np->pgdir = proc->pgdir;
+  np->sz = proc->sz;
+  np->parent = proc;
+  *np->tf = *proc->tf;
+
+  // Clear %eax so that fork returns 0 in the child.
+  np->tf->eax = 0;
+
+  for(i = 0; i < NOFILE; i++)
+    if(proc->ofile[i])
+      np->ofile[i] = filedup(proc->ofile[i]);
+  np->cwd = idup(proc->cwd);
+
+  safestrcpy(np->name, proc->name, sizeof(proc->name));
+ 
+  pid = np->pid;
+
+  np->thread = 1;
+
+
+
+  // temporary array to copy into the bottom of new stack 
+  // for the thread (i.e., to the high address in stack
+  // page, since the stack grows downward)
+  uint ustack[2];
+  uint sp = (uint)stack+PGSIZE;
+  ustack[0] = 0xffffffff; // fake return PC
+  ustack[1] = (uint)arg;
+
+  sp -= 8; // stack grows down by 2 ints/8 bytes
+  if (copyout(np->pgdir, sp, ustack, 8) < 0) {
+    // failed to copy bottom of stack into new task
+    return -1;
+  }
+  np->tf->eip = (uint)fcn;
+  np->tf->esp = sp;
+  switchuvm(np);
+  np->state = RUNNABLE;
+  
+  return pid;
+}
+
+int 
+join(int pid)
+{
+  if (proc->thread == 1) return -1; 
+
+  //not sure if needs proc->parent or proc->pid
+  if (pid ==proc->parent->pid) return -1;
+
+  struct proc *p;
+  int havekids;
+
+  acquire(&ptable.lock);
+
+  
+  for(;;){
+
+
+	//checks parent pid of each child
+	for (p = ptable.proc; p< &ptable.proc[NPROC]; p++) {
+		if (p->pid ==pid){
+			//checks whether pid is valid
+			if (pid == -1) return -1;
+		}
+	}
+
+    // Scan through table looking for zombie children.
+    havekids = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->parent != proc)
+        continue;
+      havekids = 1;
+      if(p->state == ZOMBIE){
+        // Found one.
+        pid = p->pid;
+        kfree(p->kstack);
+        p->kstack = 0;
+        freevm(p->pgdir);
+        p->state = UNUSED;
+        p->pid = 0;
+        p->parent = 0;
+        p->name[0] = 0;
+        p->killed = 0;
+        release(&ptable.lock);
+        return pid;
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if(!havekids || proc->killed){
+      release(&ptable.lock);
+      return -1;
+    }
+
+    // Wait for children to exit.  (See wakeup1 call in proc_exit.)
+    sleep(proc, &ptable.lock);  //DOC: wait-sleep
+  }
+}
+
+
+
 
 // Exit the current process.  Does not return.
 // An exited process remains in the zombie state
@@ -464,3 +584,4 @@ procdump(void)
     cprintf("\n");
   }
 }
+

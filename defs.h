@@ -9,6 +9,11 @@ struct spinlock;
 struct stat;
 struct superblock;
 
+//Our functions
+int 			join(int pid); 
+int 			clone(void(*fcn)(void *), void *arg, void *stack);
+
+
 // bio.c
 void            binit(void);
 struct buf*     bread(uint, uint);
@@ -118,6 +123,7 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+
 
 // swtch.S
 void            swtch(struct context**, struct context*);
