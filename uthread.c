@@ -3,38 +3,35 @@
 #include "fcntl.h"
 #include "user.h"
 #include "x86.h"
+#include "mmu.h"
+#include "param.h"
 
 
 //This is where you'll need to implement the user-level functions
 
 #define NUMSTACK 64
  
-typedef struct	{
-	void * stack;
-	int pid;
-} processinfo
 
 int stackarr[NUMSTACK];
 int stackcount = 0;
 
 void lock_init(lock_t *lock) {
-	lock->locked = 1; //1 == locked 0 is unlocked
+	lock->locked = 0; //0 is locked; 1 is unlocked
 }
 
 void lock_acquire(lock_t *lock) {
-	while(xchg(&lk->locked, 1) != 0);
+	while(xchg(&lock->locked, 1) != 0); {}
 }
 
 void lock_release(lock_t *lock) {
-	lock->locked = 0; //unlocked... have to use xchg here??
+	xchg(&lock->locked, 0);
 }
 
 int thread_join(int pid) {
 	int thread_pid = join(pid);
 		if(thread_pid < NUMSTACK && thread_pid > 0)
 		{
-			free(stackarr[thread_pid - 1].stack);
-		
+			free((void *) stackarr[thread_pid - 1]);
 		}
 	
 	return thread_pid;
@@ -47,17 +44,11 @@ int thread_create(void (*start_routine)(void *), void *arg) {
 		stack += PGSIZE - ((uint)stack % PGSIZE);
 	}
 	int thread_pid = clone(start_routine, arg, stack);
-	if(thread_pid = -1)
+	if(thread_pid < 0 || thread_pid > NUMSTACK)
 	{
-		return -1:
+		return -1;
 	}
-	
-	else
-	{
-		stackarr[stackcount].stack = stack;
-		stackarr[stackcount].pid = thread_pid;
-		stackcount++;
-	}
+	stackarr[thread_pid-1] = (uint) stack;
 	return thread_pid;
 	
 }

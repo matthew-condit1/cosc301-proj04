@@ -112,15 +112,27 @@ growproc(int n)
   acquire(&ptable.lock);
   sz = proc->sz;
   if(n > 0){
-    if((sz = allocuvm(proc->pgdir, sz, sz + n)) == 0)
-      return -1;
+    if((sz = allocuvm(proc->pgdir, sz, sz + n)) == 0) {
+   	    release(&ptable.lock); 
+		return -1;
+    }
   } else if(n < 0){
-    if((sz = deallocuvm(proc->pgdir, sz, sz + n)) == 0)
-      return -1;
+    if((sz = deallocuvm(proc->pgdir, sz, sz + n)) == 0) {
+		release(&ptable.lock);      
+		return -1;
+    }
   }
   proc->sz = sz;
   switchuvm(proc);
   release(&ptable.lock);
+
+  struct proc *p;
+  for (p=ptable.proc; p<&ptable.proc[NPROC]; p++) {
+    if ((p->parent == proc && p->thread == 1) || (proc->parent == p && proc->thread == 1)) {
+      p->sz = sz;
+    }
+  }
+
   return 0;
 }
 
@@ -297,20 +309,6 @@ exit(void)
   int fd;
    
 
- /* 
-  { 
-   	for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) 
-  	{ 
-   		  if(p->parent == proc && p->thread==1) 
- 		  { 
-   		    p->killed = 1; 
- 	  	    if(p->state == SLEEPING) 
- 	  	      {p->state = RUNNABLE;} 
- 	            join(p->pid); 
- 	  	  } 
- 	} 
-  } 
-*/
   if(proc == initproc)
     panic("init exiting");
 
@@ -334,12 +332,29 @@ exit(void)
 
   // Pass abandoned children to init.
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+   
+  }
+
+  int pid;
+  for (p=ptable.proc; p<&ptable.proc[NPROC]; p++) {
+    if (p->thread == 1 && p->parent==proc) {
+      p->killed = 1;
+	  pid = p->pid;
+	  release(&ptable.lock);
+      join(pid);
+      acquire(&ptable.lock);
+      if (p->state == SLEEPING) {
+        p->state = RUNNABLE;
+      }
+    }
     if(p->parent == proc){
       p->parent = initproc;
-      if(p->state == ZOMBIE)
+      if(p->state == ZOMBIE) 
         wakeup1(initproc);
     }
   }
+
+
 
   // Jump into the scheduler, never to return.
   proc->state = ZOMBIE;
