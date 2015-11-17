@@ -10,12 +10,15 @@
 
 
 void lock_init(lock_t *lock) {
+	lock->locked = 1; //1 == locked 0 is unlocked
 }
 
 void lock_acquire(lock_t *lock) {
+	while(xchg(&lk->locked, 1) != 0);
 }
 
 void lock_release(lock_t *lock) {
+	lock->locked = 0; //unlocked... have to use xchg here??
 }
 
 int thread_join(int pid) {
