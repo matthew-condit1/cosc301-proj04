@@ -10,9 +10,13 @@
 //This is where you'll need to implement the user-level functions
 
 #define NUMSTACK 64
- 
 
-int stackarr[NUMSTACK];
+typedef struct __info {
+	void* stack;
+	int pid;
+} info;
+
+info stackarr[NUMSTACK];
 int stackcount = 0;
 
 void lock_init(lock_t *lock) {
@@ -29,26 +33,31 @@ void lock_release(lock_t *lock) {
 
 int thread_join(int pid) {
 	int thread_pid = join(pid);
-		if(thread_pid < NUMSTACK && thread_pid > 0)
+	int i;
+	for (i=0; i<stackcount;i++) {
+		if(stackarr[i].pid == thread_pid)
 		{
-			free((void *) stackarr[thread_pid - 1]);
+			free(stackarr[i].stack);
 		}
+	}
 	
 	return thread_pid;
 }
 
 int thread_create(void (*start_routine)(void *), void *arg) {
-	void * stack = malloc(PGSIZE * 2);
-	if((uint)stack % PGSIZE)
+	void * new_stack = malloc(2*PGSIZE);
+	if((uint)new_stack % PGSIZE)
 	{
-		stack += PGSIZE - ((uint)stack % PGSIZE);
+		new_stack = new_stack + (PGSIZE - ((uint)new_stack % PGSIZE));
 	}
-	int thread_pid = clone(start_routine, arg, stack);
-	if(thread_pid < 0 || thread_pid > NUMSTACK)
+	info * new_info = &stackarr[stackcount];
+	new_info->stack = new_stack;
+	int thread_pid = clone(start_routine, arg, new_stack);
+	new_info->pid = thread_pid;
+	if(stackcount<NUMSTACK)
 	{
-		return -1;
+		stackcount++;
 	}
-	stackarr[thread_pid-1] = (uint) stack;
 	return thread_pid;
 	
 }

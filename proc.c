@@ -194,11 +194,21 @@ clone(void(*fcn)(void*), void *arg, void *stack)
   //Check to make sure stack is page aligned and one page
   if (((int) stack % PGSIZE)!=0 ||fcn ==0||stack==0)  return -1; 
   
+  np->sz = proc->sz;
+  np->parent = proc;
+
+  if(proc->thread == 1)
+  {
+    np->parent = proc->parent;
+  }
+
+  else
+  {
+    np->parent = proc;
+  }
 
   //initialize thread here
   np->pgdir = proc->pgdir;
-  np->sz = proc->sz;
-  np->parent = proc;
   *np->tf = *proc->tf;
 
   // Clear %eax so that fork returns 0 in the child.
@@ -266,22 +276,24 @@ join(int pid)
     // Scan through table looking for zombie children.
     havekids = 0;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->parent != proc)
+      if(p->thread!=1 || p->parent != proc || p->pgdir!=proc->pgdir)
         continue;
       havekids = 1;
-      if(p->state == ZOMBIE){
-        // Found one.
-        pid = p->pid;
-        kfree(p->kstack);
-        p->kstack = 0;
-        freevm(p->pgdir);
-        p->state = UNUSED;
-        p->pid = 0;
-        p->parent = 0;
-        p->name[0] = 0;
-        p->killed = 0;
-        release(&ptable.lock);
-        return pid;
+	  if (pid < 0 || pid == p->pid) {
+        if(p->state == ZOMBIE){
+          // Found one.
+          pid = p->pid;
+          kfree(p->kstack);
+          p->kstack = 0;
+          //freevm(p->pgdir);
+          p->state = UNUSED;
+          p->pid = 0;
+          p->parent = 0;
+          p->name[0] = 0;
+          p->killed = 0;
+          release(&ptable.lock);
+          return pid;
+        }
       }
     }
 
@@ -372,34 +384,41 @@ wait(void)
   if (proc->thread ==1) return -1;  
 
   struct proc *p;
-  int havekids, pid;
+  int havekids, pid, just_threads;
 
   acquire(&ptable.lock);
   for(;;){
     // Scan through table looking for zombie children.
     havekids = 0;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->parent != proc)
-        continue;
+      if(p->thread==1 || p->parent != proc || p->pgdir==proc->pgdir)
+		continue;
+	  if (p->thread==1)
+        just_threads=1;
       havekids = 1;
       if(p->state == ZOMBIE){
         // Found one.
+		just_threads = 0;
         pid = p->pid;
-        kfree(p->kstack);
-        p->kstack = 0;
-        freevm(p->pgdir);
-        p->state = UNUSED;
-        p->pid = 0;
-        p->parent = 0;
-        p->name[0] = 0;
-        p->killed = 0;
-        release(&ptable.lock);
-        return pid;
+        if(p->thread == 0)
+		{
+        
+          kfree(p->kstack);
+          p->kstack = 0;
+          freevm(p->pgdir);
+          p->state = UNUSED;
+          p->pid = 0;
+          p->parent = 0;
+          p->name[0] = 0;
+          p->killed = 0;
+          release(&ptable.lock);
+          return pid;
+         }
       }
     }
 
     // No point waiting if we don't have any children.
-    if(!havekids || proc->killed){
+    if(!havekids || proc->killed || just_threads == 1){
       release(&ptable.lock);
       return -1;
     }
